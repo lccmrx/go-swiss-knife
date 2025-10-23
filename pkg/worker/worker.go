@@ -15,7 +15,6 @@ const (
 )
 
 type WorkerPool struct {
-	workerIds           sync.Map
 	tasks               chan task
 	size                uint32
 	taskQueueMultiplier uint32
@@ -51,7 +50,6 @@ func New(opts ...optFn) *WorkerPool {
 		workers:             make(chan struct{}, workerPoolDefaultSize),
 		wg:                  sync.WaitGroup{},
 		taskQueueMultiplier: taskQueueDefaultCapacityMultiplier,
-		workerIds:           sync.Map{},
 	}
 
 	for _, opt := range opts {
@@ -60,21 +58,20 @@ func New(opts ...optFn) *WorkerPool {
 
 	collector := collector(p)
 
-	go func() {
+	p.wg.Go(func() {
+		wg := sync.WaitGroup{}
 		for task := range p.tasks {
 			workerID := uuid.Must(uuid.NewV7())
 
 			p.workers <- struct{}{} // acquire slot
-			p.workerIds.Store(workerID, struct{}{})
 
-			p.wg.Go(func() {
+			wg.Go(func() {
 				start := time.Now()
 				defer func() {
 					if r := recover(); r != nil {
 						slog.Error("worker panicked", "worker-id", workerID, "error", r)
 					}
 
-					p.workerIds.Delete(workerID)
 					<-p.workers // release slot
 
 					took := time.Since(start)
@@ -86,7 +83,9 @@ func New(opts ...optFn) *WorkerPool {
 				task.fn()
 			})
 		}
-	}()
+
+		wg.Wait()
+	})
 
 	return p
 }
@@ -95,7 +94,8 @@ func (p *WorkerPool) Dispatch(fn func() error) (taskId uuid.UUID, err error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			err = fmt.Errorf("recovered panic: %s", r)
+			// named return value
+			err = fmt.Errorf("tried to write to a closed channel: %s", r)
 			return
 		}
 	}()
@@ -109,10 +109,10 @@ func (p *WorkerPool) Dispatch(fn func() error) (taskId uuid.UUID, err error) {
 }
 
 func (p *WorkerPool) Wait() {
-	slog.Info("closing worker")
+	slog.Debug("closing incoming tasks channel")
 	close(p.tasks)
-	slog.Info("waiting for finishing queued tasks")
 	now := time.Now()
+	slog.Debug("waiting for queued tasks", "queued-tasks", len(p.tasks))
 	p.wg.Wait()
-	slog.Info("done finishing queued tasks", "took", time.Since(now).String())
+	slog.Debug("worker pool finished all tasks", "took", time.Since(now).String())
 }

@@ -55,13 +55,6 @@ func collector(p *WorkerPool) chan<- time.Duration {
 				continue
 			}
 
-			var workerIds []any
-
-			p.workerIds.Range(func(key, value any) bool {
-				workerIds = append(workerIds, key)
-				return true
-			})
-
 			throughput, taskCount := r.estimatedThroughput()
 			if throughput == time.Duration(0) {
 				continue
@@ -69,9 +62,9 @@ func collector(p *WorkerPool) chan<- time.Duration {
 
 			slog.Debug("worker pool stats",
 				"active-workers", workingWorkers,
-				"active-workers-ids", workerIds,
 				"queued-tasks", queuedTasks,
-				"estimated-throughput", fmt.Sprintf("%s/task (metric of %d tasks)", throughput, taskCount),
+				"throughput", fmt.Sprintf("%s/task (metric of %d tasks)", throughput, taskCount),
+				"estimated-lag", fmt.Sprintf("%s (for %d queued tasks / %d workers)", throughput*time.Duration(queuedTasks)/time.Duration(p.size), queuedTasks, workingWorkers),
 			)
 		}
 	}()
