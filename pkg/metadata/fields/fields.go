@@ -28,7 +28,8 @@ func (f Field) Value(ctx context.Context) string {
 }
 
 var FieldKeysMap = map[field]struct{}{
-	RequestID: {},
-	TraceID:   {},
-	SpanID:    {},
+	RequestID:     {},
+	TraceID:       {},
+	SpanID:        {},
+	CorrelationID: {},
 }
