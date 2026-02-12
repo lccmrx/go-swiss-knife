@@ -3,6 +3,8 @@ package log
 import (
 	"context"
 	"log/slog"
+	"reflect"
+	"slices"
 
 	"github.com/lccmrx/go-swiss-knife/pkg/metadata"
 	"github.com/lccmrx/go-swiss-knife/pkg/metadata/fields"
@@ -29,6 +31,14 @@ func (h *handler) Handle(ctx context.Context, record slog.Record) error {
 	attrs := make([]slog.Attr, 0, len(md))
 	additionalAttrs := make([]slog.Attr, 0, len(md))
 	for k, v := range md {
+		vo := reflect.ValueOf(v)
+
+		if slices.Contains([]reflect.Kind{reflect.String}, vo.Kind()) {
+			if vo.IsZero() {
+				continue
+			}
+		}
+
 		if _, ok := fields.FieldKeysMap[fields.Field(k)]; !ok {
 			additionalAttrs = append(additionalAttrs, slog.Any(k, v))
 			continue
